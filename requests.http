@@ -1,0 +1,11 @@
+### Send a user view event
+POST http://localhost:3001/api/events/view
+Content-Type: application/json
+
+### Get view history for a user
+GET http://localhost:3001/api/users/user-123/views
+
+{
+  "userId": "user-123",
+  "pageUrl": "/products/fancy-shoes"
+}
