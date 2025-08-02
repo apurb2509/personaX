@@ -1,28 +1,26 @@
 const { Kafka } = require('kafkajs');
 const cassandra = require('cassandra-driver');
-const { v4: uuidv4 } = require('uuid'); // We'll use UUIDs for unique event IDs
+const { v4: uuidv4 } = require('uuid');
 
 // --- Kafka Client Setup ---
 const kafka = new Kafka({
   clientId: 'event-consumer',
-  brokers: ['localhost:9092'],
+  brokers: ['kafka:29092'], // Changed from localhost
 });
 const consumer = kafka.consumer({ groupId: 'analytics-group' });
 
 // --- Cassandra Client Setup ---
 const cassandraClient = new cassandra.Client({
-  contactPoints: ['localhost:9042'],
-  localDataCenter: 'datacenter1', // Default for the official Docker image
+  contactPoints: ['cassandra:9042'], // Changed from localhost
+  localDataCenter: 'datacenter1',
 });
 
 // --- Main Application Logic ---
 const run = async () => {
-  // 1. Connect to services
   await consumer.connect();
   await cassandraClient.connect();
   console.log('Successfully connected to Kafka and Cassandra.');
 
-  // 2. Ensure database schema exists (Keyspace and Table)
   await cassandraClient.execute(`
     CREATE KEYSPACE IF NOT EXISTS personalization_keyspace
     WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1'};
@@ -38,18 +36,15 @@ const run = async () => {
   `);
   console.log('Database schema is ready.');
 
-  // 3. Subscribe to the Kafka topic
   await consumer.subscribe({ topic: 'user-views', fromBeginning: true });
   console.log('Consumer is listening for events on "user-views" topic...');
 
-  // 4. Run the consumer to process messages
   await consumer.run({
     eachMessage: async ({ topic, partition, message }) => {
       console.log('✅ Received new event:');
       const eventData = JSON.parse(message.value.toString());
       console.log({ value: eventData });
 
-      // Insert the event into Cassandra
       const query = 'INSERT INTO personalization_keyspace.user_views (event_id, user_id, page_url, event_time) VALUES (?, ?, ?, ?)';
       const params = [uuidv4(), eventData.userId, eventData.pageUrl, new Date()];
       await cassandraClient.execute(query, params, { prepare: true });
@@ -65,6 +60,3 @@ run().catch(async (error) => {
   await cassandraClient.shutdown();
   process.exit(1);
 });
-
-// Add uuid to your project if it's not already there
-// In the terminal (in backend folder): npm install uuid
